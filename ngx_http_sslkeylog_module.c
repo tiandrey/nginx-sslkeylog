@@ -16,12 +16,19 @@ typedef ngx_int_t (*ngx_sslkeylog_variable_handler_pt)(ngx_connection_t *c,
 static ngx_int_t ngx_http_sslkeylog_variable(ngx_http_request_t *r,
     ngx_http_variable_value_t *v, uintptr_t data);
 
+
 static ngx_int_t ngx_http_sslkeylog_add_variables(ngx_conf_t *cf);
 
 
+static ngx_int_t sslkeylog_get_se(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s);
+static ngx_int_t sslkeylog_get_cr(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s);
+static ngx_int_t sslkeylog_get_sr(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s);
+static ngx_int_t sslkeylog_get_mk(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s);
+static ngx_int_t sslkeylog_get_cs(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s);
+
 
 static ngx_http_module_t  ngx_http_sslkeylog_module_ctx = {
-    ngx_http_sslkeylog_add_variables,      /* preconfiguration */
+    ngx_http_sslkeylog_add_variables,           /* preconfiguration */
     NULL,                                  /* postconfiguration */
 
     NULL,                                  /* create main configuration */
@@ -37,7 +44,7 @@ static ngx_http_module_t  ngx_http_sslkeylog_module_ctx = {
 
 ngx_module_t  ngx_http_sslkeylog_module = {
     NGX_MODULE_V1,
-    &ngx_http_sslkeylog_module_ctx,        /* module context */
+    &ngx_http_sslkeylog_module_ctx,             /* module context */
     NULL,                                  /* module directives */
     NGX_HTTP_MODULE,                       /* module type */
     NULL,                                  /* init master */
@@ -51,7 +58,29 @@ ngx_module_t  ngx_http_sslkeylog_module = {
 };
 
 
-ngx_int_t sslkeylog_get_se(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
+static ngx_http_variable_t  ngx_http_sslkeylog_vars[] = {
+
+    { ngx_string("sslkeylog_se"), NULL, ngx_http_sslkeylog_variable, /* session id */
+      (uintptr_t) sslkeylog_get_se, NGX_HTTP_VAR_CHANGEABLE, 0 },
+
+    { ngx_string("sslkeylog_cr"), NULL, ngx_http_sslkeylog_variable, /* client random */
+      (uintptr_t) sslkeylog_get_cr, NGX_HTTP_VAR_CHANGEABLE, 0 },
+
+    { ngx_string("sslkeylog_sr"), NULL, ngx_http_sslkeylog_variable, /* server random */
+      (uintptr_t) sslkeylog_get_sr, NGX_HTTP_VAR_CHANGEABLE, 0 },
+
+    { ngx_string("sslkeylog_mk"), NULL, ngx_http_sslkeylog_variable, /* master key */
+      (uintptr_t) sslkeylog_get_mk, NGX_HTTP_VAR_CHANGEABLE, 0 },
+
+    { ngx_string("sslkeylog_cs"), NULL, ngx_http_sslkeylog_variable, /* cipher suite */
+      (uintptr_t) sslkeylog_get_cs, NGX_HTTP_VAR_CHANGEABLE, 0 },
+
+      ngx_http_null_variable
+};
+
+
+static ngx_int_t
+sslkeylog_get_se(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
 {
     u_char        *buf;
     SSL_SESSION   *sess;
@@ -76,7 +105,9 @@ ngx_int_t sslkeylog_get_se(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
     return NGX_OK;
 }
 
-ngx_int_t sslkeylog_get_cs(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
+
+static ngx_int_t
+sslkeylog_get_cs(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
 {
     unsigned long cnid;
 
@@ -91,7 +122,9 @@ ngx_int_t sslkeylog_get_cs(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
     return NGX_OK;
 }
 
-ngx_int_t sslkeylog_get_cr(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
+
+static ngx_int_t
+sslkeylog_get_cr(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
 {
     u_char      *buf;
     size_t      len;
@@ -108,7 +141,9 @@ ngx_int_t sslkeylog_get_cr(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
     return NGX_OK;
 }
 
-ngx_int_t sslkeylog_get_sr(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
+
+static ngx_int_t
+sslkeylog_get_sr(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
 {
     u_char      *buf;
     size_t      len;
@@ -125,7 +160,9 @@ ngx_int_t sslkeylog_get_sr(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
     return NGX_OK;
 }
 
-ngx_int_t sslkeylog_get_mk(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
+
+static ngx_int_t
+sslkeylog_get_mk(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
 {
     SSL_SESSION *sess;
     u_char      *buf;
@@ -148,26 +185,6 @@ ngx_int_t sslkeylog_get_mk(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
     ngx_hex_dump(s->data, buf, len);
     return NGX_OK;
 }
-
-static ngx_http_variable_t  ngx_http_sslkeylog_vars[] = {
-
-    { ngx_string("sslkeylog_se"), NULL, ngx_http_sslkeylog_variable, /* session id */
-      (uintptr_t) sslkeylog_get_se, NGX_HTTP_VAR_CHANGEABLE, 0 },
-
-    { ngx_string("sslkeylog_cr"), NULL, ngx_http_sslkeylog_variable, /* client random */
-      (uintptr_t) sslkeylog_get_cr, NGX_HTTP_VAR_CHANGEABLE, 0 },
-
-    { ngx_string("sslkeylog_sr"), NULL, ngx_http_sslkeylog_variable, /* server random */
-      (uintptr_t) sslkeylog_get_sr, NGX_HTTP_VAR_CHANGEABLE, 0 },
-
-    { ngx_string("sslkeylog_mk"), NULL, ngx_http_sslkeylog_variable, /* master key */
-      (uintptr_t) sslkeylog_get_mk, NGX_HTTP_VAR_CHANGEABLE, 0 },
-
-    { ngx_string("sslkeylog_cs"), NULL, ngx_http_sslkeylog_variable, /* cipher suite */
-      (uintptr_t) sslkeylog_get_cs, NGX_HTTP_VAR_CHANGEABLE, 0 },
-
-      ngx_http_null_variable
-};
 
 
 static ngx_int_t

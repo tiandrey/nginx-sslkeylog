@@ -1,8 +1,6 @@
-
 /*
- * Andrey Tikhonov <tiacorpo@gmail.com>, 2020
+ * Andrey Tikhonov <tiacorpo@gmail.com>, 2020-2023
  */
-
 
 #include <ngx_config.h>
 #include <ngx_core.h>
@@ -25,10 +23,18 @@ static ngx_int_t sslkeylog_get_cr(ngx_connection_t *c, ngx_pool_t *pool, ngx_str
 static ngx_int_t sslkeylog_get_sr(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s);
 static ngx_int_t sslkeylog_get_mk(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s);
 static ngx_int_t sslkeylog_get_cs(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s);
+static ngx_int_t sslkeylog_get_es(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s);
+static ngx_int_t sslkeylog_get_ees(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s);
+static ngx_int_t sslkeylog_get_cets(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s);
+static ngx_int_t sslkeylog_get_cts(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s);
+static ngx_int_t sslkeylog_get_sts(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s);
+static ngx_int_t sslkeylog_get_chts(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s);
+static ngx_int_t sslkeylog_get_shts(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s);
 
+static ngx_int_t _sslkeylog_copy_str(ngx_connection_t *c, ngx_pool_t *pool, const ngx_str_t *src, ngx_str_t *dst);
 
 static ngx_http_module_t  ngx_http_sslkeylog_module_ctx = {
-    ngx_http_sslkeylog_add_variables,           /* preconfiguration */
+    ngx_http_sslkeylog_add_variables,      /* preconfiguration */
     NULL,                                  /* postconfiguration */
 
     NULL,                                  /* create main configuration */
@@ -44,7 +50,7 @@ static ngx_http_module_t  ngx_http_sslkeylog_module_ctx = {
 
 ngx_module_t  ngx_http_sslkeylog_module = {
     NGX_MODULE_V1,
-    &ngx_http_sslkeylog_module_ctx,             /* module context */
+    &ngx_http_sslkeylog_module_ctx,        /* module context */
     NULL,                                  /* module directives */
     NGX_HTTP_MODULE,                       /* module type */
     NULL,                                  /* init master */
@@ -74,6 +80,27 @@ static ngx_http_variable_t  ngx_http_sslkeylog_vars[] = {
 
     { ngx_string("sslkeylog_cs"), NULL, ngx_http_sslkeylog_variable, /* cipher suite */
       (uintptr_t) sslkeylog_get_cs, NGX_HTTP_VAR_CHANGEABLE, 0 },
+
+    { ngx_string("sslkeylog_es"), NULL, ngx_http_sslkeylog_variable, /* exporter secret */
+      (uintptr_t) sslkeylog_get_es, NGX_HTTP_VAR_CHANGEABLE, 0 },
+
+    { ngx_string("sslkeylog_ees"), NULL, ngx_http_sslkeylog_variable, /* early exporter secret */
+      (uintptr_t) sslkeylog_get_ees, NGX_HTTP_VAR_CHANGEABLE, 0 },
+
+    { ngx_string("sslkeylog_cets"), NULL, ngx_http_sslkeylog_variable, /* client early traffic secret */
+      (uintptr_t) sslkeylog_get_cets, NGX_HTTP_VAR_CHANGEABLE, 0 },
+
+    { ngx_string("sslkeylog_cts"), NULL, ngx_http_sslkeylog_variable, /* client traffic secret */
+      (uintptr_t) sslkeylog_get_cts, NGX_HTTP_VAR_CHANGEABLE, 0 },
+
+    { ngx_string("sslkeylog_sts"), NULL, ngx_http_sslkeylog_variable, /* server traffic secret */
+      (uintptr_t) sslkeylog_get_sts, NGX_HTTP_VAR_CHANGEABLE, 0 },
+
+    { ngx_string("sslkeylog_chts"), NULL, ngx_http_sslkeylog_variable, /* client handshake traffic secret */
+      (uintptr_t) sslkeylog_get_chts, NGX_HTTP_VAR_CHANGEABLE, 0 },
+
+    { ngx_string("sslkeylog_shts"), NULL, ngx_http_sslkeylog_variable, /* server handshake traffic secret */
+      (uintptr_t) sslkeylog_get_shts, NGX_HTTP_VAR_CHANGEABLE, 0 },
 
       ngx_http_null_variable
 };
@@ -186,12 +213,74 @@ sslkeylog_get_mk(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
     return NGX_OK;
 }
 
+static ngx_int_t
+_sslkeylog_copy_str(ngx_connection_t *c, ngx_pool_t *pool, const ngx_str_t *src, ngx_str_t *dst)
+{
+/*
+    *** use this variant in case connection pool is destroyed before variable is evaluated and/or used ***
+    u_char *buf;
+
+    buf = ngx_pnalloc(pool, dst->len);
+    if (buf == NULL) {
+      ngx_log_error(NGX_LOG_ERR, c->log, 0, "sslkeylog: ngx_pnalloc() failed");
+      return NGX_ERROR;
+    }
+    ngx_memcpy(buf, src->data, src->len);
+    dst->len = src->len;
+    dst->data = buf;
+*/
+    dst->len = src->len;
+    dst->data = src->data;
+    return NGX_OK;
+}
+
+static ngx_int_t
+sslkeylog_get_es(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
+{
+    return _sslkeylog_copy_str(c, pool, &(c->ssl->sslkeylog_es), s);
+}
+
+static ngx_int_t
+sslkeylog_get_ees(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
+{
+    return _sslkeylog_copy_str(c, pool, &(c->ssl->sslkeylog_ees), s);
+}
+
+static ngx_int_t
+sslkeylog_get_cets(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
+{
+    return _sslkeylog_copy_str(c, pool, &(c->ssl->sslkeylog_cets), s);
+}
+
+static ngx_int_t
+sslkeylog_get_cts(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
+{
+    return _sslkeylog_copy_str(c, pool, &(c->ssl->sslkeylog_cts), s);
+}
+
+static ngx_int_t
+sslkeylog_get_sts(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
+{
+    return _sslkeylog_copy_str(c, pool, &(c->ssl->sslkeylog_sts), s);
+}
+
+static ngx_int_t
+sslkeylog_get_chts(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
+{
+    return _sslkeylog_copy_str(c, pool, &(c->ssl->sslkeylog_chts), s);
+}
+
+static ngx_int_t
+sslkeylog_get_shts(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
+{
+    return _sslkeylog_copy_str(c, pool, &(c->ssl->sslkeylog_shts), s);
+}
 
 static ngx_int_t
 ngx_http_sslkeylog_variable(ngx_http_request_t *r, ngx_http_variable_value_t *v,
     uintptr_t data)
 {
-ngx_sslkeylog_variable_handler_pt  handler = (ngx_sslkeylog_variable_handler_pt) data;
+    ngx_sslkeylog_variable_handler_pt  handler = (ngx_sslkeylog_variable_handler_pt) data;
 
     ngx_str_t  s;
 

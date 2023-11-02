@@ -26,9 +26,17 @@ All variables are hex-encoded.
 - Since version 0.2.0 it is necessary to patch nginx sources - that's the price of TLSv1.3 support. I've provided patches for versions I've worked with.
 
 ## Building
+First, apply patch to nginx sources:
 ```
 <nginx src dir> $ patch -Np1 -i <path/to/sslkeylog/module>/nginx-patches/<nginx-version>.patch
+```
+After that you can build nginx either with module statically linked in
+```
 <nginx src dir> $ ./configure <your usual nginx configure options> --add-module=<path/to/sslkeylog/module>
+```
+or with dynamic module
+```
+<nginx src dir> $ ./configure <your usual nginx configure options> --add-dynamic-module=<path/to/sslkeylog/module>
 ```
 
 ## Usage

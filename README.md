@@ -22,7 +22,7 @@ All variables are hex-encoded.
 
 ## Prerequisites
 - OpenSSL 1.1.1+. Other libssl flavours, like BoringSSL, may work if they provide `SSL_CTX_set_keylog_callback()` function (LibreSSL does not).
-- Tested on nginx 1.20.
+- Tested (a little, not in production!) on nginx 1.20, 1.24.
 - Since version 0.2.0 it is necessary to patch nginx sources - that's the price of TLSv1.3 support. I've provided patches for versions I've worked with.
 
 ## Building

@@ -1,0 +1,113 @@
+diff --git a/src/event/ngx_event_openssl.c b/src/event/ngx_event_openssl.c
+index 8468101d1..7e30df120 100644
+--- a/src/event/ngx_event_openssl.c
++++ b/src/event/ngx_event_openssl.c
+@@ -27,6 +27,10 @@ static int ngx_ssl_password_callback(char *buf, int size, int rwflag,
+ static int ngx_ssl_verify_callback(int ok, X509_STORE_CTX *x509_store);
+ static void ngx_ssl_info_callback(const ngx_ssl_conn_t *ssl_conn, int where,
+     int ret);
++#ifdef SSL_KEYLOG_ENABLED
++static void ngx_ssl_keylog_callback(const ngx_ssl_conn_t *ssl_conn,
++    const char *line);
++#endif
+ static void ngx_ssl_passwords_cleanup(void *data);
+ static int ngx_ssl_new_client_session(ngx_ssl_conn_t *ssl_conn,
+     ngx_ssl_session_t *sess);
+@@ -425,6 +429,9 @@ ngx_ssl_create(ngx_ssl_t *ssl, ngx_uint_t protocols, void *data)
+     SSL_CTX_set_read_ahead(ssl->ctx, 1);
+ 
+     SSL_CTX_set_info_callback(ssl->ctx, ngx_ssl_info_callback);
++#ifdef SSL_KEYLOG_ENABLED
++    SSL_CTX_set_keylog_callback(ssl->ctx, ngx_ssl_keylog_callback);
++#endif
+ 
+     return NGX_OK;
+ }
+@@ -1193,6 +1200,54 @@ ngx_ssl_info_callback(const ngx_ssl_conn_t *ssl_conn, int where, int ret)
+     }
+ }
+ 
++#ifdef SSL_KEYLOG_ENABLED
++static void
++ngx_ssl_keylog_callback(const ngx_ssl_conn_t *ssl_conn, const char *line)
++{
++    ngx_connection_t  *c;
++    ngx_str_t  *s;
++    const char *secret;
++
++    c = ngx_ssl_get_connection((ngx_ssl_conn_t *) ssl_conn);
++
++    /* uncomment to add more debugging info
++    ngx_log_debug2(NGX_LOG_DEBUG_EVENT, c->log, 0, "SSL KEYLOG for connection %xl: \"%s\"", (unsigned long) c, line);
++    */
++
++    if (strncmp(line, "EXPORTER_SECRET", 15) == 0) {
++      s = &(c->ssl->sslkeylog_es);
++    } else if (strncmp(line, "EARLY_EXPORTER_SECRET", 21) == 0) {
++      s = &(c->ssl->sslkeylog_ees);
++    } else if (strncmp(line, "CLIENT_EARLY_TRAFFIC_SECRET", 27) == 0) {
++      s = &(c->ssl->sslkeylog_cets);
++    } else if (strncmp(line, "CLIENT_HANDSHAKE_TRAFFIC_SECRET", 31) == 0) {
++      s = &(c->ssl->sslkeylog_chts);
++    } else if (strncmp(line, "SERVER_HANDSHAKE_TRAFFIC_SECRET", 31) == 0) {
++      s = &(c->ssl->sslkeylog_shts);
++    } else if (strncmp(line, "CLIENT_TRAFFIC_SECRET_0", 23) == 0) {
++      s = &(c->ssl->sslkeylog_cts);
++    } else if (strncmp(line, "SERVER_TRAFFIC_SECRET_0", 23) == 0) {
++      s = &(c->ssl->sslkeylog_sts);
++    } else {
++      return;
++    }
++
++    if (s->len > 0) {
++      ngx_log_error(NGX_LOG_ALERT, c->log, 0, "warning: overwriting ssl keylog secret '%s' with '%s'", s->data, line);
++    }
++
++    secret = strrchr(line, ' ') + 1;
++    s->len = strlen(secret);
++    /* store terminating null for safe logging */
++    s->data = ngx_pnalloc(c->pool, s->len+1);
++    if (s->data == NULL) {
++      s->len = 0;
++      ngx_log_error(NGX_LOG_ERR, c->log, 0, "pnalloc failed");
++      return;
++    }
++    strncpy((char*) s->data, secret, s->len+1);
++}
++#endif
+ 
+ ngx_array_t *
+ ngx_ssl_read_password_file(ngx_conf_t *cf, ngx_str_t *file)
+diff --git a/src/event/ngx_event_openssl.h b/src/event/ngx_event_openssl.h
+index c062f912c..203b589ec 100644
+--- a/src/event/ngx_event_openssl.h
++++ b/src/event/ngx_event_openssl.h
+@@ -42,6 +42,12 @@
+ 
+ #define NGX_SSL_NAME     "OpenSSL"
+ 
++#ifdef SSLKEYLOG_PRESENT
++#if OPENSSL_VERSION_NUMBER >= 0x10101000L && !defined(LIBRESSL_VERSION_NUMBER)
++#define SSL_KEYLOG_ENABLED
++#endif
++#endif
++
+ 
+ #if (defined LIBRESSL_VERSION_NUMBER && OPENSSL_VERSION_NUMBER == 0x20000000L)
+ #undef OPENSSL_VERSION_NUMBER
+@@ -128,6 +134,15 @@ struct ngx_ssl_connection_s {
+     unsigned                    in_ocsp:1;
+     unsigned                    early_preread:1;
+     unsigned                    write_blocked:1;
++#ifdef SSL_KEYLOG_ENABLED
++    ngx_str_t                   sslkeylog_es;
++    ngx_str_t                   sslkeylog_ees;
++    ngx_str_t                   sslkeylog_shts;
++    ngx_str_t                   sslkeylog_chts;
++    ngx_str_t                   sslkeylog_sts;
++    ngx_str_t                   sslkeylog_cts;
++    ngx_str_t                   sslkeylog_cets;
++#endif
+ };
+ 
+ 
